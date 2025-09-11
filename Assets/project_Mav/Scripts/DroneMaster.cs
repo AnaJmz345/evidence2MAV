@@ -6,9 +6,13 @@ public class DroneMaster : MonoBehaviour
     [SerializeField] private List<DroneController> drones = new List<DroneController>();
     [SerializeField] private float formationSpread = 5f;
 
-    // 🔍 Palabras clave de la persona objetivo
+    [Header("Prefabs")]
+    public GameObject personPrefab; // arrastra tu FarmGuy.prefab aquí
+
+    // Objetivo
     private string targetColor = "blue";
     private bool targetHasHat = false;
+    private PersonController targetPerson;
 
     void Start()
     {
@@ -38,6 +42,17 @@ public class DroneMaster : MonoBehaviour
 
         AnalyzeText(description);
 
+        // 🧍 Spawn de la target person EXACTAMENTE en la coordenada
+        Vector3 pos = new Vector3(x, 0, z);
+        GameObject person = Instantiate(personPrefab, pos, Quaternion.identity);
+        person.tag = "Person";
+
+        targetPerson = person.GetComponent<PersonController>();
+        targetPerson.shirtColor = targetColor;
+        targetPerson.hasHat = targetHasHat;
+
+        Debug.Log($"👤 Target person spawneada en {pos} con {targetColor} shirt, hat={targetHasHat}");
+
         if (drones.Count == 0)
         {
             Debug.LogError("No hay drones asignados para la misión!");
@@ -46,11 +61,7 @@ public class DroneMaster : MonoBehaviour
 
         for (int i = 0; i < drones.Count; i++)
         {
-            if (drones[i] == null)
-            {
-                Debug.LogError($"El dron en el índice {i} no existe!");
-                continue;
-            }
+            if (drones[i] == null) continue;
 
             float offsetX = (i % 2 == 0) ? formationSpread : -formationSpread;
             float offsetZ = (i < 2) ? formationSpread : -formationSpread;
@@ -66,26 +77,41 @@ public class DroneMaster : MonoBehaviour
     {
         string desc = description.ToLower();
 
-        // 🎨 Detectar color
-        if (desc.Contains("red")) targetColor = "red";
-        else if (desc.Contains("green")) targetColor = "green";
-        else if (desc.Contains("blue")) targetColor = "blue";
-        else targetColor = "unknown";
+        // 🎨 Paleta de colores soportados
+        string[] colors = { "red", "green", "blue", "yellow", "black", "white" };
+        targetColor = "blue"; // default
 
-        // 👒 Detectar si tiene sombrero
-        targetHasHat = desc.Contains("hat");
+        foreach (var color in colors)
+        {
+            if (desc.Contains(color))
+            {
+                targetColor = color;
+                break;
+            }
+        }
+
+        // 👒 Sombrero
+        targetHasHat = desc.Contains("hat") || desc.Contains("cap") || desc.Contains("sombrero");
 
         Debug.Log($"🎯 Target esperado: {targetColor} shirt, hat={targetHasHat}");
     }
 
-    // ✅ Comparar atributos de cada persona encontrada
-    public void ReportPersonFound(PersonController pc)
+    // ✅ Comparar atributos
+    public void ReportPersonFound(PersonController pc, DroneController drone)
     {
         if (pc == null) return;
 
-        if (pc.shirtColor.ToLower() == targetColor && pc.hasHat == targetHasHat)
-            Debug.Log("✅ ¡Target person encontrada!");
+        Debug.Log($"🔎 {drone.name} verificando persona -> Person=({pc.shirtColor}, hat={pc.hasHat}) | Target=({targetColor}, hat={targetHasHat})");
+
+        if (pc.shirtColor.Trim().ToLower() == targetColor.Trim().ToLower() 
+            && pc.hasHat == targetHasHat)
+        {
+            Debug.Log($"✅ {drone.name} encontró a la target en {pc.transform.position}");
+            drone.LandAtTarget(pc.transform.position);
+        }
         else
+        {
             Debug.Log($"👤 Persona encontrada pero no coincide -> {pc.shirtColor}, hat={pc.hasHat}");
+        }
     }
 }

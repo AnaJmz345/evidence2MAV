@@ -6669,6 +6669,8 @@ MonoBehaviour:
   cruiseAltitude: 20
   speed: 8
   turnSpeed: 5
+  scanRadius: 15
+  scanTime: 10
   landingCheckRadius: 1
   landingClearHeight: 1
   landingBlockMask:
@@ -12277,6 +12279,8 @@ MonoBehaviour:
   cruiseAltitude: 20
   speed: 8
   turnSpeed: 5
+  scanRadius: 15
+  scanTime: 10
   landingCheckRadius: 1
   landingClearHeight: 1
   landingBlockMask:
@@ -13583,13 +13587,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1569291667}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 30, z: -170}
+  m_LocalRotation: {x: -0, y: 0.3826828, z: -0, w: 0.92387986}
+  m_LocalPosition: {x: -41, y: 19, z: -132}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 45, z: 0}
 --- !u!1 &1597292147
 GameObject:
   m_ObjectHideFlags: 0
@@ -14518,6 +14522,8 @@ MonoBehaviour:
   - {fileID: 1858538561}
   - {fileID: 831818818}
   formationSpread: 3
+  personPrefab: {fileID: 0}
+  spawnRadius: 15
 --- !u!4 &1684888340
 Transform:
   m_ObjectHideFlags: 0
@@ -16320,6 +16326,8 @@ MonoBehaviour:
   cruiseAltitude: 20
   speed: 8
   turnSpeed: 5
+  scanRadius: 15
+  scanTime: 10
   landingCheckRadius: 1
   landingClearHeight: 1
   landingBlockMask:
@@ -16880,63 +16888,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1648197477468367534, guid: a95a56c07ed819a498c943d426fc8fc8, type: 3}
   m_PrefabInstance: {fileID: 1901066120}
   m_PrefabAsset: {fileID: 0}
---- !u!1001 &1905698289
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: 4054872306331759640, guid: 2e46997b170b2d24882234f82d9d97f3, type: 3}
-      propertyPath: m_Name
-      value: FarmGuy
-      objectReference: {fileID: 0}
-    - target: {fileID: 6877236322095382289, guid: 2e46997b170b2d24882234f82d9d97f3, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: -17.310112
-      objectReference: {fileID: 0}
-    - target: {fileID: 6877236322095382289, guid: 2e46997b170b2d24882234f82d9d97f3, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: 0.011375427
-      objectReference: {fileID: 0}
-    - target: {fileID: 6877236322095382289, guid: 2e46997b170b2d24882234f82d9d97f3, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: -104.910774
-      objectReference: {fileID: 0}
-    - target: {fileID: 6877236322095382289, guid: 2e46997b170b2d24882234f82d9d97f3, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 6877236322095382289, guid: 2e46997b170b2d24882234f82d9d97f3, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6877236322095382289, guid: 2e46997b170b2d24882234f82d9d97f3, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6877236322095382289, guid: 2e46997b170b2d24882234f82d9d97f3, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6877236322095382289, guid: 2e46997b170b2d24882234f82d9d97f3, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6877236322095382289, guid: 2e46997b170b2d24882234f82d9d97f3, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6877236322095382289, guid: 2e46997b170b2d24882234f82d9d97f3, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: 2e46997b170b2d24882234f82d9d97f3, type: 3}
 --- !u!4 &1916167167 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 8379931074817556883, guid: aaddd6168ef3f2c489a0647e0296a292, type: 3}
@@ -22072,4 +22023,3 @@ SceneRoots:
   - {fileID: 654327806}
   - {fileID: 209213207}
   - {fileID: 733700488}
-  - {fileID: 1905698289}

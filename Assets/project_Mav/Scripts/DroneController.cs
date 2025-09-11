@@ -14,6 +14,12 @@ public class DroneController : MonoBehaviour
     public float speed = 8f;
     public float turnSpeed = 5f;
 
+    [Header("Escaneo")]
+    public float scanRadius = 25f;   // radio horizontal
+    public float scanTime = 10f;     // tiempo máximo de escaneo
+    private bool scanning = false;
+    private float scanTimer = 0f;
+
     [Header("Aterrizaje (detección)")]
     public float landingCheckRadius = 1.2f;
     public float landingClearHeight = 2.0f;
@@ -38,7 +44,6 @@ public class DroneController : MonoBehaviour
 
     private bool _isActive = false;
 
-    // 🔗 Referencia al DroneMaster
     private DroneMaster master;
 
     public void Activate() => _isActive = true;
@@ -54,8 +59,6 @@ public class DroneController : MonoBehaviour
         int maskPersona   = 1 << LayerMask.NameToLayer("Persona");
 
         landingBlockMask = maskObstacles | maskWater | maskPersona;
-
-        Debug.Log($"[Drone] landingBlockMask={landingBlockMask} (debe incluir Obstacles + Water + Persona)");
     }
 
     void Start()
@@ -68,18 +71,10 @@ public class DroneController : MonoBehaviour
         _missionXZ = new Vector3(x, 0f, z);
         _avoidanceAttempts = 0;
 
-        Debug.Log($"🛰 Intentando ir a (X={x}, Z={z})");
-        Debug.DrawRay(new Vector3(x, 50f, z), Vector3.down * 100f, Color.magenta, 5f);
-
-        float localRadius = 5f;
-
-        if (NavMesh.SamplePosition(_missionXZ, out var hit, localRadius, NavMesh.AllAreas))
+        if (NavMesh.SamplePosition(_missionXZ, out var hit, 5f, NavMesh.AllAreas))
         {
-            float distToTarget = Vector3.Distance(_missionXZ, hit.position);
-            Debug.Log($"✅ Punto proyectado en NavMesh: {hit.position} (distancia desde objetivo: {distToTarget:F2})");
-
             var startXZ = new Vector3(transform.position.x, 0f, transform.position.z);
-            if (!NavMesh.SamplePosition(startXZ, out var startHit, localRadius, NavMesh.AllAreas))
+            if (!NavMesh.SamplePosition(startXZ, out var startHit, 5f, NavMesh.AllAreas))
             {
                 Debug.LogWarning("❌ No se pudo proyectar el punto de inicio en la NavMesh.");
                 return;
@@ -89,7 +84,6 @@ public class DroneController : MonoBehaviour
             if (NavMesh.CalculatePath(startHit.position, hit.position, NavMesh.AllAreas, path) &&
                 path.corners != null && path.corners.Length > 0)
             {
-                Debug.Log($"🛫 Ruta válida con {path.corners.Length} puntos.");
                 _pathPoints.Clear();
                 foreach (var p in path.corners)
                     _pathPoints.Add(new Vector3(p.x, cruiseAltitude, p.z));
@@ -98,14 +92,6 @@ public class DroneController : MonoBehaviour
                 _enRoute = true;
                 _landing = false;
             }
-            else
-            {
-                Debug.LogWarning("⚠️ No se pudo calcular un camino válido en la NavMesh.");
-            }
-        }
-        else
-        {
-            Debug.LogWarning($"❌ Destino ({x}, {z}) fuera de la NavMesh o no alcanzable (radio={localRadius}).");
         }
     }
 
@@ -119,10 +105,14 @@ public class DroneController : MonoBehaviour
             return;
         }
 
-        if (_enRoute && _pathIndex >= _pathPoints.Count && !_landing)
+        if (_enRoute && _pathIndex >= _pathPoints.Count && !scanning && !_landing)
         {
-            TryLandNearMissionXZ();
+            scanning = true;
+            scanTimer = 0f;
+            Debug.Log($"🔎 {name} llegó a la zona, iniciando escaneo...");
         }
+
+        if (scanning) ScanForPersons();
     }
 
     void FlyAlongPath()
@@ -149,6 +139,64 @@ public class DroneController : MonoBehaviour
         }
     }
 
+    void ScanForPersons()
+    {
+        scanTimer += Time.deltaTime;
+
+        Vector3 top = transform.position;
+        Vector3 bottom = new Vector3(transform.position.x, 0f, transform.position.z);
+
+        Collider[] hits = Physics.OverlapCapsule(top, bottom, scanRadius);
+        foreach (var hit in hits)
+        {
+            if (hit.CompareTag("Person"))
+            {
+                PersonController pc = hit.GetComponent<PersonController>();
+                if (pc != null && master != null)
+                {
+                    master.ReportPersonFound(pc, this);
+                }
+            }
+        }
+
+        if (scanTimer >= scanTime)
+        {
+            Debug.Log($"⌛ {name} no encontró a la target. Procediendo a aterrizar...");
+            scanning = false;
+            TryLandNearMissionXZ();
+        }
+    }
+
+    public void LandAtTarget(Vector3 pos)
+    {
+        if (_landing) return;
+
+        Debug.Log($"🛬 {name} aterrizando en posición de target {pos}");
+        _landing = true;
+        _enRoute = false;
+        StartCoroutine(LandAtPosition(pos));
+    }
+
+    private System.Collections.IEnumerator LandAtPosition(Vector3 targetPos)
+    {
+        float descendSpeed = speed * 0.6f;
+        Vector3 descendTarget = new Vector3(targetPos.x, 0.1f, targetPos.z);
+
+        while (true)
+        {
+            float dist = Vector3.Distance(transform.position, descendTarget);
+            if (dist <= 0.05f)
+            {
+                Debug.Log($"🟢 {name} aterrizó junto a la target.");
+                _landing = false;
+                yield break;
+            }
+
+            transform.position = Vector3.MoveTowards(transform.position, descendTarget, descendSpeed * Time.deltaTime);
+            yield return null;
+        }
+    }
+
     void TryLandNearMissionXZ()
     {
         _landing = true;
@@ -158,116 +206,32 @@ public class DroneController : MonoBehaviour
 
     System.Collections.IEnumerator LandCoroutine()
     {
-        float hoverHeight = 0.05f;
         float descendSpeed = speed * 0.6f;
-        float groundCheckDistance = 120f;
-        float repelForce = 0.2f;
-
-        bool avoiding = false;
-        Collider droneCollider = GetComponentInChildren<Collider>();
-        Vector3 descendTarget = Vector3.zero;
-        bool hasValidGround = false;
+        Vector3 descendTarget = new Vector3(transform.position.x, 0.1f, transform.position.z);
 
         while (true)
         {
-            Collider[] overlapping = Physics.OverlapBox(
-                droneCollider.bounds.center,
-                droneCollider.bounds.extents,
-                transform.rotation,
-                landingBlockMask
-            );
-
-            if (overlapping.Length > 0)
+            float distToTarget = Vector3.Distance(transform.position, descendTarget);
+            if (distToTarget <= 0.05f)
             {
-                if (!avoiding) Debug.LogWarning("⚠️ ¡Colisión durante el descenso! Evadiendo...");
-                avoiding = true;
-
-                foreach (var obstacle in overlapping)
-                {
-                    if (obstacle.gameObject == gameObject) continue;
-
-                    Vector3 repelDir = (transform.position - obstacle.ClosestPoint(transform.position)).normalized;
-                    transform.position += repelDir * repelForce;
-                }
-
-                hasValidGround = false;
-                yield return null;
-                continue;
-            }
-            else
-            {
-                avoiding = false;
+                Debug.Log("🟢 Aterrizaje exitoso (fallback).");
+                _enRoute = false;
+                _landing = false;
+                yield break;
             }
 
-            RaycastHit hitInfo;
-            if (Physics.Raycast(transform.position, Vector3.down, out hitInfo, groundCheckDistance, ~0, QueryTriggerInteraction.Ignore))
-            {
-                Vector3 groundHitPoint = hitInfo.point;
-
-                if (NavMesh.SamplePosition(groundHitPoint, out var navHit, 1.0f, NavMesh.AllAreas))
-                {
-                    descendTarget = new Vector3(transform.position.x, navHit.position.y + hoverHeight, transform.position.z);
-                    hasValidGround = true;
-                }
-                else
-                {
-                    transform.position += transform.forward * speed * Time.deltaTime;
-                    hasValidGround = false;
-                    yield return null;
-                    continue;
-                }
-            }
-            else
-            {
-                transform.position += transform.forward * speed * Time.deltaTime;
-                hasValidGround = false;
-                yield return null;
-                continue;
-            }
-
-            if (hasValidGround)
-            {
-                float distToTarget = Vector3.Distance(transform.position, descendTarget);
-                if (distToTarget <= 0.05f)
-                {
-                    Debug.Log("🟢 Aterrizaje exitoso.");
-                    _enRoute = false;
-                    _landing = false;
-
-                    // 🔍 Buscar personas cercanas tras el aterrizaje
-                    Collider[] hits = Physics.OverlapSphere(transform.position, 10f);
-                    foreach (var hit in hits)
-                    {
-                        if (hit.CompareTag("Person"))
-                        {
-                            PersonController pc = hit.GetComponent<PersonController>();
-                            if (pc != null && master != null)
-                            {
-                                master.ReportPersonFound(pc);
-                            }
-                        }
-                    }
-
-                    yield break;
-                }
-
-                transform.position = Vector3.MoveTowards(transform.position, descendTarget, descendSpeed * Time.deltaTime);
-            }
-
+            transform.position = Vector3.MoveTowards(transform.position, descendTarget, descendSpeed * Time.deltaTime);
             yield return null;
         }
     }
 
-    void OnDrawGizmos()
+    void OnDrawGizmosSelected()
     {
-        if (!drawPath || _pathPoints == null) return;
-        Gizmos.color = Color.cyan;
-        for (int i = 0; i < _pathPoints.Count - 1; i++)
-        {
-            Gizmos.DrawLine(_pathPoints[i], _pathPoints[i + 1]);
-            Gizmos.DrawSphere(_pathPoints[i], 0.15f);
-        }
-        if (_pathPoints.Count > 0)
-            Gizmos.DrawSphere(_pathPoints[^1], 0.2f);
+        // visualización del área de escaneo
+        Gizmos.color = Color.yellow;
+        Vector3 top = transform.position;
+        Vector3 bottom = new Vector3(transform.position.x, 0f, transform.position.z);
+        Gizmos.DrawWireSphere(bottom, scanRadius);
+        Gizmos.DrawLine(top, bottom);
     }
 }
