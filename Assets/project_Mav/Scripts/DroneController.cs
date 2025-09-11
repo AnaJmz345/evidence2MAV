@@ -38,6 +38,9 @@ public class DroneController : MonoBehaviour
 
     private bool _isActive = false;
 
+    // 🔗 Referencia al DroneMaster
+    private DroneMaster master;
+
     public void Activate() => _isActive = true;
     public void Deactivate() => _isActive = false;
 
@@ -53,6 +56,11 @@ public class DroneController : MonoBehaviour
         landingBlockMask = maskObstacles | maskWater | maskPersona;
 
         Debug.Log($"[Drone] landingBlockMask={landingBlockMask} (debe incluir Obstacles + Water + Persona)");
+    }
+
+    void Start()
+    {
+        master = FindObjectOfType<DroneMaster>();
     }
 
     public void GoToXZ(float x, float z)
@@ -225,6 +233,21 @@ public class DroneController : MonoBehaviour
                     Debug.Log("🟢 Aterrizaje exitoso.");
                     _enRoute = false;
                     _landing = false;
+
+                    // 🔍 Buscar personas cercanas tras el aterrizaje
+                    Collider[] hits = Physics.OverlapSphere(transform.position, 10f);
+                    foreach (var hit in hits)
+                    {
+                        if (hit.CompareTag("Person"))
+                        {
+                            PersonController pc = hit.GetComponent<PersonController>();
+                            if (pc != null && master != null)
+                            {
+                                master.ReportPersonFound(pc);
+                            }
+                        }
+                    }
+
                     yield break;
                 }
 
