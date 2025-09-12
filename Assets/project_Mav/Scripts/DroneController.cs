@@ -1,14 +1,40 @@
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.AI;
+using Unity.AI.Navigation;
 
 public class DroneController : MonoBehaviour
 {
+
+     [Header("Refs")]
+    public Transform droneVisual;
+    public NavMeshSurface surface;
+
     [Header("Movimiento")]
     public float speed = 6f;
-    public float altitude = 15f;
+    public float cruiseAltitude = 15f;
+    public float turnSpeed = 5f;
+    private float _navMeshRadius =120f;
+
+    [Header("Aterrizaje (detección)")]
+    public float landingCheckRadius = 1.2f;
+    public float landingClearHeight = 2.0f;
+    public LayerMask landingBlockMask;
+    public float safeSearchRadius = 10f;
+    public int safeSamples = 40;
+
+    [Header("Estrategia de desvío")]
+    public float avoidanceDistance = 2f;
+    public int maxAvoidanceAttempts = 10;
 
     [Header("Escaneo")]
     public float scanRadius = 10f;
     public float scanInterval = 5f;
+
+    [Header("Debug")]
+    public bool drawPath = true;
+    public bool logLandingDebug = true;
+
 
     [Header("Zona de búsqueda")]
     public float searchRadius = 40f;         // radio fijo de búsqueda
@@ -27,13 +53,38 @@ public class DroneController : MonoBehaviour
     private float stuckCheckInterval = 1f;
     private float stuckThreshold = 0.2f;
 
+    /*POSIBLEMENTE BORRAR*/
+     private readonly List<Vector3> _pathPoints = new();
+    private int _pathIndex = 0;
+    private bool _enRoute = false;
+    private bool _landing = false;
+    private Vector3 _missionXZ;
+    private int _avoidanceAttempts = 0;
+
     public void AssignMaster(DroneMaster m) => master = m;
+
+    void Awake()
+    {
+        if (surface != null) surface.BuildNavMesh();
+        if (droneVisual == null) droneVisual = transform;
+
+            // Obtener las máscaras individualmente
+        int maskObstacles = LayerMask.GetMask("Obstacles");
+        int maskWater     = LayerMask.GetMask("Water");
+        int maskPersona   = 1 << LayerMask.NameToLayer("Persona");  // ¡forzado!
+
+        landingBlockMask = maskObstacles | maskWater | maskPersona;
+
+        Debug.Log($"[Drone] landingBlockMask={landingBlockMask} (debe incluir Obstacles + Water + Persona)");
+
+        Debug.Log($"[Drone] landingBlockMask={landingBlockMask} (debe ser >0).");
+    }
 
     public void Activate()
     {
         isActive = true;
         PickNewRandomTarget();
-        transform.position = new Vector3(transform.position.x, altitude, transform.position.z);
+        transform.position = new Vector3(transform.position.x, cruiseAltitude, transform.position.z);
         lastPosition = transform.position;
     }
 
@@ -65,7 +116,7 @@ public class DroneController : MonoBehaviour
 
     private void MoveToTarget()
     {
-        Vector3 moveDir = (new Vector3(targetXZ.x, altitude, targetXZ.z) - transform.position).normalized;
+        Vector3 moveDir = (new Vector3(targetXZ.x, cruiseAltitude, targetXZ.z) - transform.position).normalized;
         transform.position += moveDir * speed * Time.deltaTime;
     }
 
@@ -104,30 +155,127 @@ public class DroneController : MonoBehaviour
         {
             Debug.Log($"✅ {name} recibió permiso para aterrizar.");
             landing = true;
-            StartCoroutine(LandSequence());
+            TryLandNearMissionXZ();
         }
         else if (msg.Performative == "Inform" && msg.Content == "StopSearch")
         {
             Debug.Log($"🟡 {name} recibió orden de detener búsqueda y aterrizar donde está.");
             missionComplete = true;
             landing = true;
-            StartCoroutine(LandSequence());
+            TryLandNearMissionXZ();
         }
     }
 
-    private System.Collections.IEnumerator LandSequence()
+    void TryLandNearMissionXZ()
     {
-        float descendSpeed = 3f;
-        Vector3 groundTarget = new Vector3(transform.position.x, 0.5f, transform.position.z);
+        _landing = true;
+        _avoidanceAttempts = 0;
+        StartCoroutine(LandCoroutine());
+    }
 
-        while (Vector3.Distance(transform.position, groundTarget) > 0.1f)
+    System.Collections.IEnumerator LandCoroutine()
+{
+    Debug.Log("✈ Iniciando rutina de aterrizaje adaptativa...");
+    Debug.Log($"Layer index for 'Persona': {LayerMask.NameToLayer("Persona")}");
+    Debug.Log($"Mask value for 'Persona': {1 << LayerMask.NameToLayer("Persona")}");
+    Debug.Log($"landingBlockMask final: {landingBlockMask.value}");
+
+    float minStep = 0.01f;
+    float descendSpeed = speed * 0.6f;
+    float hoverHeight = 0.05f; //antes era 0.2
+    float collisionCheckRadius = 0.6f;
+    float groundCheckDistance = 120f;
+    float repelForce = 0.2f; // Reducido para suavizar evasión
+
+    bool avoiding = false;
+    Collider droneCollider = GetComponentInChildren<Collider>();
+    Vector3 descendTarget = Vector3.zero;
+    bool hasValidGround = false;
+
+    while (true)
+    {
+        // 1️⃣ Checar colisiones con obstáculos mientras baja
+        Collider[] overlapping = Physics.OverlapBox(
+            droneCollider.bounds.center,
+            droneCollider.bounds.extents,
+            transform.rotation,
+            landingBlockMask
+        );
+
+        if (overlapping.Length > 0)
         {
-            transform.position = Vector3.MoveTowards(transform.position, groundTarget, descendSpeed * Time.deltaTime);
+            if (!avoiding)
+                Debug.LogWarning("⚠ ¡Colisión durante el descenso! Evadiendo...");
+
+            avoiding = true;
+
+            foreach (var obstacle in overlapping)
+            {
+                if (obstacle.gameObject == gameObject) continue;
+
+                Vector3 repelDir = (transform.position - obstacle.ClosestPoint(transform.position)).normalized;
+                transform.position += repelDir * repelForce; // Suavizado con Time.deltaTime
+                Debug.Log($"🧱 Evadiendo obstáculo: {obstacle.name}");
+            }
+
+            // Después de evadir, forzar recálculo del punto de aterrizaje
+            hasValidGround = false;
             yield return null;
+            continue;
+        }
+        else
+        {
+            avoiding = false;
         }
 
-        Debug.Log($"🛬 {name} aterrizó con éxito.");
+        // 2️⃣ Verificar si hay suelo válido justo debajo
+        RaycastHit hitInfo;
+        if (Physics.Raycast(transform.position, Vector3.down, out hitInfo, groundCheckDistance, ~0, QueryTriggerInteraction.Ignore))
+        {
+            Vector3 groundHitPoint = hitInfo.point;
+          
+            if (NavMesh.SamplePosition(groundHitPoint, out var navHit, 1.0f, NavMesh.AllAreas))
+            {
+                // Actualizar descendTarget siempre, no solo la primera vez
+                descendTarget = new Vector3(transform.position.x, navHit.position.y + hoverHeight, transform.position.z);
+                hasValidGround = true;
+            }
+            else
+            {
+                Debug.Log("❌ Suelo debajo no es parte de NavMesh. Avanzando horizontalmente para buscar...");
+                transform.position += transform.forward * speed * Time.deltaTime;
+                hasValidGround = false;
+                yield return null;
+                continue;
+            }
+        }
+        else
+        {
+            Debug.Log("❌ No hay suelo detectado. Avanzando horizontalmente...");
+            transform.position += transform.forward * speed * Time.deltaTime;
+            hasValidGround = false;
+            yield return null;
+            continue;
+        }
+
+        // 3️⃣ Si hay suelo válido, proceder con el descenso
+        if (hasValidGround)
+        {
+            float distToTarget = Vector3.Distance(transform.position, descendTarget);
+            if (distToTarget <= 0.05f)
+            {
+                Debug.Log("🟢 Aterrizaje exitoso.");
+                _enRoute = false;
+                _landing = false;
+                yield break;
+            }
+
+            transform.position = Vector3.MoveTowards(transform.position, descendTarget, descendSpeed * Time.deltaTime);
+        }
+
+        yield return null;
     }
+}
 
     private void CheckIfStuck()
     {
