@@ -12,7 +12,7 @@ public class DroneMaster : MonoBehaviour
     [Header("Prefabs")]
     public List<GameObject> personPrefabs; // arrastra tu FarmGuy.prefab aquí
     // coordenadas extra para spawnear distractores
-    public float distractorRadius = 30f;
+    public float distractorRadius = 40f;
     public int distractorCount = 3; // cuántos distraer máximo
 
     private bool missionAccomplished = false;
@@ -179,6 +179,7 @@ public class DroneMaster : MonoBehaviour
 
         foreach (var drone in drones)
         {
+            drone.cruiseAltitude = 50f;
             drone.searchCenter = fixedSearchCenter;
             drone.searchRadius = 40f;
             drone.Activate();
