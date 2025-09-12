@@ -75,9 +75,6 @@ public class DroneController : MonoBehaviour
 
         landingBlockMask = maskObstacles | maskWater | maskPersona;
 
-        Debug.Log($"[Drone] landingBlockMask={landingBlockMask} (debe incluir Obstacles + Water + Persona)");
-
-        Debug.Log($"[Drone] landingBlockMask={landingBlockMask} (debe ser >0).");
     }
 
     public void Activate()
@@ -176,9 +173,9 @@ public class DroneController : MonoBehaviour
     System.Collections.IEnumerator LandCoroutine()
 {
     Debug.Log("✈ Iniciando rutina de aterrizaje adaptativa...");
-    Debug.Log($"Layer index for 'Persona': {LayerMask.NameToLayer("Persona")}");
+    /*Debug.Log($"Layer index for 'Persona': {LayerMask.NameToLayer("Persona")}");
     Debug.Log($"Mask value for 'Persona': {1 << LayerMask.NameToLayer("Persona")}");
-    Debug.Log($"landingBlockMask final: {landingBlockMask.value}");
+    Debug.Log($"landingBlockMask final: {landingBlockMask.value}");*/
 
     float minStep = 0.01f;
     float descendSpeed = speed * 0.6f;
@@ -205,7 +202,7 @@ public class DroneController : MonoBehaviour
         if (overlapping.Length > 0)
         {
             if (!avoiding)
-                Debug.LogWarning("⚠ ¡Colisión durante el descenso! Evadiendo...");
+                //Debug.LogWarning("⚠ ¡Colisión durante el descenso! Evadiendo...");
 
             avoiding = true;
 
@@ -215,7 +212,7 @@ public class DroneController : MonoBehaviour
 
                 Vector3 repelDir = (transform.position - obstacle.ClosestPoint(transform.position)).normalized;
                 transform.position += repelDir * repelForce; // Suavizado con Time.deltaTime
-                Debug.Log($"🧱 Evadiendo obstáculo: {obstacle.name}");
+                //Debug.Log($"🧱 Evadiendo obstáculo: {obstacle.name}");
             }
 
             // Después de evadir, forzar recálculo del punto de aterrizaje
@@ -242,7 +239,7 @@ public class DroneController : MonoBehaviour
             }
             else
             {
-                Debug.Log("❌ Suelo debajo no es parte de NavMesh. Avanzando horizontalmente para buscar...");
+               // Debug.Log("❌ Suelo debajo no es parte de NavMesh. Avanzando horizontalmente para buscar...");
                 transform.position += transform.forward * speed * Time.deltaTime;
                 hasValidGround = false;
                 yield return null;
@@ -251,7 +248,7 @@ public class DroneController : MonoBehaviour
         }
         else
         {
-            Debug.Log("❌ No hay suelo detectado. Avanzando horizontalmente...");
+           // Debug.Log("❌ No hay suelo detectado. Avanzando horizontalmente...");
             transform.position += transform.forward * speed * Time.deltaTime;
             hasValidGround = false;
             yield return null;
@@ -286,7 +283,7 @@ public class DroneController : MonoBehaviour
             float distanceMoved = Vector3.Distance(transform.position, lastPosition);
             if (distanceMoved < stuckThreshold)
             {
-                Debug.LogWarning($"🧱 {name} detectado como atascado. Eligiendo nueva dirección.");
+                //Debug.LogWarning($"🧱 {name} detectado como atascado. Eligiendo nueva dirección.");
                 PickNewRandomTarget();
             }
 

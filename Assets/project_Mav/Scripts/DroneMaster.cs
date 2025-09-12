@@ -45,7 +45,7 @@ public class DroneMaster : MonoBehaviour
      // 📐 Calcula los límites del terreno
     private void CalculateGroundBounds()
     {
-        Debug.Log("Holamiamor");
+    
         Terrain t = FindObjectOfType<Terrain>();
         if (t != null)
         {
@@ -67,7 +67,7 @@ public class DroneMaster : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("⚠️ No se encontró Terrain ni Renderer llamado 'Ground'. Usa valores por defecto.");
+            //Debug.LogWarning("⚠️ No se encontró Terrain ni Renderer llamado 'Ground'. Usa valores por defecto.");
             groundMin = new Vector3(-100, 0, -100);
             groundMax = new Vector3(100, 0, 100);
         }

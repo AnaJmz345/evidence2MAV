@@ -9,6 +9,7 @@ TagManager:
   - SpawnPoint
   - Animals
   - Ground
+  - Objetivo
   layers:
   - Default
   - TransparentFX
@@ -27,7 +28,7 @@ TagManager:
   - Chicharin
   - Persona
   - Character Preview
-  - 
+  - Objetivo
   - 
   - 
   - 
