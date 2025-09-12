@@ -12,7 +12,8 @@ public class DroneMaster : MonoBehaviour
     public float distractorRadius = 30f;
     public int distractorCount = 3; // cuántos distraer máximo
 
-
+    private bool missionAccomplished = false;
+    private DroneController assignedDrone = null;
 
     // Objetivo
     private string targetColor = "blue";
@@ -97,21 +98,13 @@ public class DroneMaster : MonoBehaviour
     {
         if (drones.Count == 0)
         {
-            DroneController[] foundDrones = FindObjectsByType<DroneController>(FindObjectsSortMode.None);
-            foreach (DroneController drone in foundDrones)
-            {
-                drones.Add(drone);
-                drone.Deactivate();
-            }
-
-            Debug.Log($"Encontrados {drones.Count} drones en la escena");
+            drones.AddRange(FindObjectsByType<DroneController>(FindObjectsSortMode.None));
         }
-        else
+
+        foreach (var drone in drones)
         {
-            foreach (DroneController drone in drones)
-            {
-                if (drone != null) drone.Deactivate();
-            }
+            drone.Deactivate();
+            drone.AssignMaster(this);
         }
     }
 
@@ -132,8 +125,16 @@ public class DroneMaster : MonoBehaviour
         Vector3 targetPos = new Vector3(x, 0, z);
         targetPos = ClampToGround(targetPos);
         GameObject targetGO = Instantiate(targetPrefab, targetPos, Quaternion.identity);
+        targetGO.tag = "Objetivo";
         targetGO.layer = LayerMask.NameToLayer("Objetivo");
-        targetPerson = targetGO.GetComponent<PersonController>();
+
+       /* BoxCollider bc = targetGO.GetComponent<BoxCollider>();
+        if (bc == null) bc = targetGO.AddComponent<BoxCollider>();
+        bc.isTrigger = true;
+        bc.center = new Vector3(0, 1.5f, 0);
+        bc.size = new Vector3(1, 100f, 1);*/
+
+        targetPerson = targetGO.GetComponentInChildren<PersonController>();
 
         targetPerson.shirtColor = targetColor;
         targetPerson.hasHat = targetHasHat;
@@ -146,7 +147,7 @@ public class DroneMaster : MonoBehaviour
             if (prefab == targetPrefab) continue; // saltar el target
 
             // 🔸 Generar posición aleatoria en un radio de 20 m alrededor del target
-            Vector2 circle = Random.insideUnitCircle * 20f; // 20 metros
+            Vector2 circle = Random.insideUnitCircle * 40f; // 20 metros
             Vector3 randomPos = new Vector3(
                 targetPos.x + circle.x,
                 0,
@@ -167,29 +168,15 @@ public class DroneMaster : MonoBehaviour
             Debug.Log($"👤 Distractor spawneado en {randomPos}");
         }
 
+        Vector3 fixedSearchCenter = targetGO.transform.position;
 
-
-
-
-
-        if (drones.Count == 0)
+        foreach (var drone in drones)
         {
-            Debug.LogError("No hay drones asignados para la misión!");
-            return;
+            drone.searchCenter = fixedSearchCenter;
+            drone.searchRadius = 40f;
+            drone.Activate();
         }
 
-        for (int i = 0; i < drones.Count; i++)
-        {
-            if (drones[i] == null) continue;
-
-            float offsetX = (i % 2 == 0) ? formationSpread : -formationSpread;
-            float offsetZ = (i < 2) ? formationSpread : -formationSpread;
-
-            drones[i].Activate();
-            drones[i].GoToXZ(x + offsetX, z + offsetZ);
-
-            Debug.Log($"Dron {i} enviado a ({x + offsetX}, {z + offsetZ})");
-        }
     }
 
     private void AnalyzeText(string description)
@@ -215,22 +202,36 @@ public class DroneMaster : MonoBehaviour
         Debug.Log($"🎯 Target esperado: {targetColor} shirt, hat={targetHasHat}");
     }
 
-    // ✅ Comparar atributos
-    public void ReportPersonFound(PersonController pc, DroneController drone)
+     public void ReceiveACL(ACLMessage msg)
     {
-        if (pc == null) return;
-
-        Debug.Log($"🔎 {drone.name} verificando persona -> Person=({pc.shirtColor}, hat={pc.hasHat}) | Target=({targetColor}, hat={targetHasHat})");
-
-        if (pc.shirtColor.Trim().ToLower() == targetColor.Trim().ToLower() 
-            && pc.hasHat == targetHasHat)
+        if (msg.Performative == "Inform" && msg.Content == "Found")
         {
-            Debug.Log($"✅ {drone.name} encontró a la target en {pc.transform.position}");
-            drone.LandAtTarget(pc.transform.position);
+            Debug.Log($"📩 ACL recibido de {msg.Sender.name}: Inform(Finding)");
+            if (!missionAccomplished)
+            {
+                missionAccomplished = true;
+                assignedDrone = msg.Sender;
+
+                ACLMessage permit = new ACLMessage("DroneMaster", msg.Sender, "Permit", "Land");
+                msg.Sender.ReceiveACL(permit);
+
+                foreach (var drone in drones)
+                {
+                    if (drone != msg.Sender)
+                    {
+                        ACLMessage landHere = new ACLMessage("DroneMaster", drone, "Inform", "StopSearch");
+                        drone.ReceiveACL(landHere);
+                    }
+                }
+            }
         }
-        else
+
+        if (msg.Performative == "Request" && msg.Content == "Land?")
         {
-            Debug.Log($"👤 Persona encontrada pero no coincide -> {pc.shirtColor}, hat={pc.hasHat}");
+            Debug.Log($"🛬 {msg.Sender.name} solicita aterrizar.");
+            // Respond in ReceiveACL logic above
         }
     }
+
+    public bool IsMissionDone() => missionAccomplished;
 }

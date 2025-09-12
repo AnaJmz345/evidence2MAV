@@ -1,237 +1,150 @@
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.AI;
-using Unity.AI.Navigation;
 
 public class DroneController : MonoBehaviour
 {
-    [Header("Refs")]
-    public Transform droneVisual;
-    public NavMeshSurface surface;
-
-    [Header("Vuelo")]
-    public float cruiseAltitude = 120f;
-    public float speed = 8f;
-    public float turnSpeed = 5f;
+    [Header("Movimiento")]
+    public float speed = 6f;
+    public float altitude = 15f;
 
     [Header("Escaneo")]
-    public float scanRadius = 25f;   // radio horizontal
-    public float scanTime = 10f;     // tiempo máximo de escaneo
-    private bool scanning = false;
+    public float scanRadius = 10f;
+    public float scanInterval = 5f;
+
+    [Header("Zona de búsqueda")]
+    public float searchRadius = 40f;         // radio fijo de búsqueda
+    public Vector3 searchCenter;             // centro fijo alrededor del cual buscar
+
+    private Vector3 targetXZ;
+    private bool isActive = false;
+    private bool landing = false;
+    private bool missionComplete = false;
+
     private float scanTimer = 0f;
-
-    [Header("Aterrizaje (detección)")]
-    public float landingCheckRadius = 1.2f;
-    public float landingClearHeight = 2.0f;
-    public LayerMask landingBlockMask;
-    public float safeSearchRadius = 10f;
-    public int safeSamples = 40;
-
-    [Header("Estrategia de desvío")]
-    public float avoidanceDistance = 2f;
-    public int maxAvoidanceAttempts = 10;
-
-    [Header("Debug")]
-    public bool drawPath = true;
-    public bool logLandingDebug = true;
-
-    private readonly List<Vector3> _pathPoints = new();
-    private int _pathIndex = 0;
-    private bool _enRoute = false;
-    private bool _landing = false;
-    private Vector3 _missionXZ;
-    private int _avoidanceAttempts = 0;
-
-    private bool _isActive = false;
-
     private DroneMaster master;
 
-    public void Activate() => _isActive = true;
-    public void Deactivate() => _isActive = false;
+    private Vector3 lastPosition;
+    private float stuckTimer = 0f;
+    private float stuckCheckInterval = 1f;
+    private float stuckThreshold = 0.2f;
 
-    void Awake()
+    public void AssignMaster(DroneMaster m) => master = m;
+
+    public void Activate()
     {
-        if (surface != null) surface.BuildNavMesh();
-        if (droneVisual == null) droneVisual = transform;
-
-        int maskObstacles = LayerMask.GetMask("Obstacles");
-        int maskWater     = LayerMask.GetMask("Water");
-        int maskPersona   = 1 << LayerMask.NameToLayer("Persona");
-
-        landingBlockMask = maskObstacles | maskWater | maskPersona;
+        isActive = true;
+        PickNewRandomTarget();
+        transform.position = new Vector3(transform.position.x, altitude, transform.position.z);
+        lastPosition = transform.position;
     }
 
-    void Start()
+    public void Deactivate()
     {
-        master = FindObjectOfType<DroneMaster>();
-    }
-
-    public void GoToXZ(float x, float z)
-    {
-        _missionXZ = new Vector3(x, 0f, z);
-        _avoidanceAttempts = 0;
-
-        if (NavMesh.SamplePosition(_missionXZ, out var hit, 5f, NavMesh.AllAreas))
-        {
-            var startXZ = new Vector3(transform.position.x, 0f, transform.position.z);
-            if (!NavMesh.SamplePosition(startXZ, out var startHit, 5f, NavMesh.AllAreas))
-            {
-                Debug.LogWarning("❌ No se pudo proyectar el punto de inicio en la NavMesh.");
-                return;
-            }
-
-            var path = new NavMeshPath();
-            if (NavMesh.CalculatePath(startHit.position, hit.position, NavMesh.AllAreas, path) &&
-                path.corners != null && path.corners.Length > 0)
-            {
-                _pathPoints.Clear();
-                foreach (var p in path.corners)
-                    _pathPoints.Add(new Vector3(p.x, cruiseAltitude, p.z));
-
-                _pathIndex = 0;
-                _enRoute = true;
-                _landing = false;
-            }
-        }
+        isActive = false;
     }
 
     void Update()
     {
-        if (!_isActive) return;
+        if (!isActive || landing || missionComplete) return;
 
-        if (_enRoute && _pathIndex < _pathPoints.Count)
-        {
-            FlyAlongPath();
-            return;
-        }
-
-        if (_enRoute && _pathIndex >= _pathPoints.Count && !scanning && !_landing)
-        {
-            scanning = true;
-            scanTimer = 0f;
-            Debug.Log($"🔎 {name} llegó a la zona, iniciando escaneo...");
-        }
-
-        if (scanning) ScanForPersons();
-    }
-
-    void FlyAlongPath()
-    {
-        Vector3 target = _pathPoints[_pathIndex];
-        Vector3 dir = (target - transform.position);
-
-        if (dir.sqrMagnitude < 1e-6f) { _pathIndex++; return; }
-
-        float dist = dir.magnitude;
-        if (dist < 0.3f) { _pathIndex++; return; }
-
-        Vector3 step = dir.normalized * speed * Time.deltaTime;
-        transform.position += step;
-
-        if (step.sqrMagnitude > 1e-6f)
-        {
-            var flat = new Vector3(step.x, 0, step.z);
-            if (flat.sqrMagnitude > 1e-6f)
-            {
-                Quaternion look = Quaternion.LookRotation(flat, Vector3.up);
-                transform.rotation = Quaternion.Slerp(transform.rotation, look, turnSpeed * Time.deltaTime);
-            }
-        }
-    }
-
-    void ScanForPersons()
-    {
         scanTimer += Time.deltaTime;
 
-        Vector3 top = transform.position;
-        Vector3 bottom = new Vector3(transform.position.x, 0f, transform.position.z);
+        if (Vector3.Distance(transform.position, targetXZ) < 1f || targetXZ == Vector3.zero)
+        {
+            PickNewRandomTarget();
+        }
 
-        Collider[] hits = Physics.OverlapCapsule(top, bottom, scanRadius);
+        MoveToTarget();
+        CheckIfStuck();
+
+        if (scanTimer >= scanInterval)
+        {
+            scanTimer = 0f;
+            ScanForTarget();
+        }
+    }
+
+    private void MoveToTarget()
+    {
+        Vector3 moveDir = (new Vector3(targetXZ.x, altitude, targetXZ.z) - transform.position).normalized;
+        transform.position += moveDir * speed * Time.deltaTime;
+    }
+
+    private void PickNewRandomTarget()
+    {
+        Vector2 offset = Random.insideUnitCircle * searchRadius;
+        float x = searchCenter.x + offset.x;
+        float z = searchCenter.z + offset.y;
+        targetXZ = new Vector3(x, 0, z);
+    }
+
+    private void ScanForTarget()
+    {
+        Collider[] hits = Physics.OverlapSphere(transform.position, scanRadius, LayerMask.GetMask("Objetivo"));
         foreach (var hit in hits)
         {
-            if (hit.CompareTag("Person"))
+            PersonController pc = hit.GetComponent<PersonController>();
+            if (pc != null && master != null)
             {
-                PersonController pc = hit.GetComponent<PersonController>();
-                if (pc != null && master != null)
-                {
-                    master.ReportPersonFound(pc, this);
-                }
-            }
-        }
+                Debug.Log($"🕵️ {name} detectó a alguien con ({pc.shirtColor}, hat={pc.hasHat})");
 
-        if (scanTimer >= scanTime)
-        {
-            Debug.Log($"⌛ {name} no encontró a la target. Procediendo a aterrizar...");
-            scanning = false;
-            TryLandNearMissionXZ();
+                ACLMessage inform = new ACLMessage(this, master, "Inform", "Found");
+                master.ReceiveACL(inform);
+
+                ACLMessage request = new ACLMessage(this, master, "Request", "Land?");
+                master.ReceiveACL(request);
+
+                break;
+            }
         }
     }
 
-    public void LandAtTarget(Vector3 pos)
+    public void ReceiveACL(ACLMessage msg)
     {
-        if (_landing) return;
-
-        Debug.Log($"🛬 {name} aterrizando en posición de target {pos}");
-        _landing = true;
-        _enRoute = false;
-        StartCoroutine(LandAtPosition(pos));
+        if (msg.Performative == "Permit" && msg.Content == "Land")
+        {
+            Debug.Log($"✅ {name} recibió permiso para aterrizar.");
+            landing = true;
+            StartCoroutine(LandSequence());
+        }
+        else if (msg.Performative == "Inform" && msg.Content == "StopSearch")
+        {
+            Debug.Log($"🟡 {name} recibió orden de detener búsqueda y aterrizar donde está.");
+            missionComplete = true;
+            landing = true;
+            StartCoroutine(LandSequence());
+        }
     }
 
-    private System.Collections.IEnumerator LandAtPosition(Vector3 targetPos)
+    private System.Collections.IEnumerator LandSequence()
     {
-        float descendSpeed = speed * 0.6f;
-        Vector3 descendTarget = new Vector3(targetPos.x, 0.1f, targetPos.z);
+        float descendSpeed = 3f;
+        Vector3 groundTarget = new Vector3(transform.position.x, 0.5f, transform.position.z);
 
-        while (true)
+        while (Vector3.Distance(transform.position, groundTarget) > 0.1f)
         {
-            float dist = Vector3.Distance(transform.position, descendTarget);
-            if (dist <= 0.05f)
-            {
-                Debug.Log($"🟢 {name} aterrizó junto a la target.");
-                _landing = false;
-                yield break;
-            }
-
-            transform.position = Vector3.MoveTowards(transform.position, descendTarget, descendSpeed * Time.deltaTime);
+            transform.position = Vector3.MoveTowards(transform.position, groundTarget, descendSpeed * Time.deltaTime);
             yield return null;
         }
+
+        Debug.Log($"🛬 {name} aterrizó con éxito.");
     }
 
-    void TryLandNearMissionXZ()
+    private void CheckIfStuck()
     {
-        _landing = true;
-        _avoidanceAttempts = 0;
-        StartCoroutine(LandCoroutine());
-    }
+        stuckTimer += Time.deltaTime;
 
-    System.Collections.IEnumerator LandCoroutine()
-    {
-        float descendSpeed = speed * 0.6f;
-        Vector3 descendTarget = new Vector3(transform.position.x, 0.1f, transform.position.z);
-
-        while (true)
+        if (stuckTimer >= stuckCheckInterval)
         {
-            float distToTarget = Vector3.Distance(transform.position, descendTarget);
-            if (distToTarget <= 0.05f)
+            float distanceMoved = Vector3.Distance(transform.position, lastPosition);
+            if (distanceMoved < stuckThreshold)
             {
-                Debug.Log("🟢 Aterrizaje exitoso (fallback).");
-                _enRoute = false;
-                _landing = false;
-                yield break;
+                Debug.LogWarning($"🧱 {name} detectado como atascado. Eligiendo nueva dirección.");
+                PickNewRandomTarget();
             }
 
-            transform.position = Vector3.MoveTowards(transform.position, descendTarget, descendSpeed * Time.deltaTime);
-            yield return null;
+            lastPosition = transform.position;
+            stuckTimer = 0f;
         }
     }
 
-    void OnDrawGizmosSelected()
-    {
-        // visualización del área de escaneo
-        Gizmos.color = Color.yellow;
-        Vector3 top = transform.position;
-        Vector3 bottom = new Vector3(transform.position.x, 0f, transform.position.z);
-        Gizmos.DrawWireSphere(bottom, scanRadius);
-        Gizmos.DrawLine(top, bottom);
-    }
 }
