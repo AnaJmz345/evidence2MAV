@@ -12,7 +12,7 @@ public class DroneController : MonoBehaviour
 
     [Header("Movimiento")]
     public float speed = 6f;
-    public float cruiseAltitude = 15f;
+    public float cruiseAltitude = 50f;
     public float turnSpeed = 5f;
     private float _navMeshRadius =120f;
 
@@ -145,6 +145,14 @@ public class DroneController : MonoBehaviour
             }
         }
     }
+    public void StopMovement()
+    {
+        isActive = false;
+        missionComplete = true;
+        landing = false;
+        Debug.Log($"🛑 {name} se detuvo tras encontrar al objetivo.");
+    }
+
 
     public void ReceiveACL(ACLMessage msg)
     {

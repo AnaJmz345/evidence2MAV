@@ -1,8 +1,11 @@
 using UnityEngine;
 using System.Collections.Generic;
-
+using TMPro;
 public class DroneMaster : MonoBehaviour
 {
+    [Header("UI")]
+    public TextMeshProUGUI statusText; 
+
     [SerializeField] private List<DroneController> drones = new List<DroneController>();
     [SerializeField] private float formationSpread = 5f;
 
@@ -105,6 +108,10 @@ public class DroneMaster : MonoBehaviour
         {
             drone.Deactivate();
             drone.AssignMaster(this);
+        }
+        if (statusText != null)
+        {
+            statusText.gameObject.SetActive(false); 
         }
     }
 
@@ -212,6 +219,22 @@ public class DroneMaster : MonoBehaviour
                 missionAccomplished = true;
                 assignedDrone = msg.Sender;
 
+                // ✅ Mostrar mensaje en UI
+                if (statusText != null)
+                {
+                    statusText.gameObject.SetActive(true);
+                    statusText.text = $"{msg.Sender.name} has found the target person!";
+                }
+
+                // ✅ detener el dron y la persona
+                msg.Sender.StopMovement();
+                if (targetPerson != null)
+                {
+                    var patrol = targetPerson.GetComponent<PersonCirclePatrol>();
+                    if (patrol != null) patrol.StopPatrol();
+                }
+
+                // ACL de aterrizaje
                 ACLMessage permit = new ACLMessage("DroneMaster", msg.Sender, "Permit", "Land");
                 msg.Sender.ReceiveACL(permit);
 
@@ -229,9 +252,9 @@ public class DroneMaster : MonoBehaviour
         if (msg.Performative == "Request" && msg.Content == "Land?")
         {
             Debug.Log($"🛬 {msg.Sender.name} solicita aterrizar.");
-            // Respond in ReceiveACL logic above
         }
     }
+
 
     public bool IsMissionDone() => missionAccomplished;
 }
