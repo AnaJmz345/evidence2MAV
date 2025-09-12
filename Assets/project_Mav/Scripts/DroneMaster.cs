@@ -107,7 +107,9 @@ public class DroneMaster : MonoBehaviour
             && pc.hasHat == targetHasHat)
         {
             Debug.Log($"✅ {drone.name} encontró a la target en {pc.transform.position}");
-            drone.LandAtTarget(pc.transform.position);
+            float standOff = 2.5f; 
+            drone.LandNearTarget(pc.transform.position, standOff);
+            //drone.LandAtTarget(pc.transform.position); agregar ubn radio
         }
         else
         {

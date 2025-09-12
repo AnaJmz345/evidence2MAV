@@ -196,6 +196,93 @@ public class DroneController : MonoBehaviour
             yield return null;
         }
     }
+    
+    public void LandNearTarget(Vector3 targetPos, float standOffDistance)
+    {
+        if (_landing) return;
+        StartCoroutine(LandNearTargetCo(targetPos, standOffDistance));
+    }
+
+    private System.Collections.IEnumerator LandNearTargetCo(Vector3 targetPos, float standOffDistance)
+    {
+        _landing = true;
+        _enRoute = false;
+
+        // 1) Candidatos alrededor del objetivo (círculo)
+        List<Vector3> candidates = new List<Vector3>();
+        int samples = Mathf.Max(12, safeSamples); // usa tu safeSamples como mínimo
+        for (int i = 0; i < samples; i++)
+        {
+            float ang = (360f / samples) * i;
+            Vector3 dir = Quaternion.Euler(0, ang, 0) * Vector3.forward;
+            Vector3 c = targetPos + dir * standOffDistance;
+            candidates.Add(new Vector3(c.x, 0f, c.z));
+        }
+
+        // 2) Valida candidatos: NavMesh + colisiones
+        Vector3? safe = null;
+        foreach (var c in candidates)
+        {
+            Vector3 test = c;
+            // Proyectar a NavMesh si tienes superficie:
+            if (NavMesh.SamplePosition(test, out var hit, 3f, NavMesh.AllAreas))
+            test = new Vector3(hit.position.x, 0f, hit.position.z);
+
+            // Chequeo de bloqueos en círculo de aterrizaje
+            bool blocked = Physics.CheckSphere(
+                new Vector3(test.x, 0.5f, test.z),
+                landingCheckRadius,
+                landingBlockMask
+            );
+            
+            if (!blocked)
+            {
+                safe = test;
+                break;
+            }
+        }
+
+        // 3) Si no hay punto seguro, aumenta radio una vez
+        if (!safe.HasValue)
+        {
+            float extra = Mathf.Max(standOffDistance * 0.75f, 2f);
+             yield return StartCoroutine(LandNearTargetCo(targetPos, standOffDistance + extra));
+             yield break; 
+        }
+
+        // 4) Desciende hacia el punto seguro
+        Vector3 descendTarget = new Vector3(safe.Value.x, 0.1f, safe.Value.z);
+        float descendSpeed = speed * 0.6f;
+
+        while (true)
+        {
+            // Seguridad: re-chequeo dinámico por si alguien entra al área
+            bool nowBlocked = Physics.CheckSphere(
+                new Vector3(descendTarget.x, 0.5f, descendTarget.z),
+                landingCheckRadius,
+                landingBlockMask
+            );
+            if (nowBlocked)
+            {
+                // vuelve a buscar otro punto cercano
+                _landing = false;
+                yield return StartCoroutine(LandNearTargetCo(targetPos, standOffDistance + 0.5f));
+                yield break;
+            }
+
+            float dist = Vector3.Distance(transform.position, descendTarget);
+            if (dist <= 0.05f)
+            {
+                Debug.Log($"🟢 {name} aterrizó cerca de la target.");
+                _landing = false;
+                yield break;
+            }
+
+            transform.position = Vector3.MoveTowards(transform.position, descendTarget, descendSpeed * Time.deltaTime);
+            yield return null;
+        }
+    }
+    //cambio radio de perimneto seguro
 
     void TryLandNearMissionXZ()
     {
