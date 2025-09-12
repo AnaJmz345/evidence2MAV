@@ -1278,6 +1278,7 @@ GameObject:
   - component: {fileID: -5514701113632952968}
   - component: {fileID: 2205618567789588390}
   - component: {fileID: 6081831802914421474}
+  - component: {fileID: -6480347373722783643}
   m_Layer: 0
   m_Name: FarmGuy
   m_TagString: Person
@@ -1409,7 +1410,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4054872306331759640}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b2c67ce836140b4479603ebcf944cddd, type: 3}
   m_Name: 
@@ -1481,6 +1482,31 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1, y: 100, z: 1}
   m_Center: {x: 0, y: 50, z: 0}
+--- !u!114 &-6480347373722783643
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4054872306331759640}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e82e89f0f68e9864aa3245638e068c4b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  radius: 20
+  clockwise: 1
+  degreesPerSecond: 18
+  pauseSeconds: {x: 0.8, y: 2}
+  burstSeconds: {x: 2, y: 4}
+  runChance: 3
+  snapToGround: 1
+  groundMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  groundCheckDown: 50
+  autoCenterAtStart: 1
+  explicitCenter: {x: 0, y: 0, z: 0}
 --- !u!1 &4212856525124326897
 GameObject:
   m_ObjectHideFlags: 0

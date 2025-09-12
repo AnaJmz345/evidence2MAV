@@ -238,9 +238,10 @@ GameObject:
   - component: {fileID: 9066429136183684636}
   - component: {fileID: 4766297319089801595}
   - component: {fileID: 1952977239157085464}
+  - component: {fileID: 686667619659682654}
   m_Layer: 0
   m_Name: ClownGuy
-  m_TagString: Untagged
+  m_TagString: Person
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -369,7 +370,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1349853843408089598}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b2c67ce836140b4479603ebcf944cddd, type: 3}
   m_Name: 
@@ -418,6 +419,31 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1, y: 100, z: 1}
   m_Center: {x: 0, y: 50, z: 0}
+--- !u!114 &686667619659682654
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1349853843408089598}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e82e89f0f68e9864aa3245638e068c4b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  radius: 20
+  clockwise: 1
+  degreesPerSecond: 18
+  pauseSeconds: {x: 0.8, y: 2}
+  burstSeconds: {x: 2, y: 4}
+  runChance: 3
+  snapToGround: 1
+  groundMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  groundCheckDown: 50
+  autoCenterAtStart: 1
+  explicitCenter: {x: 0, y: 0, z: 0}
 --- !u!1 &1518371138248494544
 GameObject:
   m_ObjectHideFlags: 0
